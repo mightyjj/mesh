@@ -6,7 +6,7 @@ The product will treat the original asset as one content object, with a platform
 
 Cross-posting is the entry point. Mesh's long-term goal is to help creators learn what content works, where it works best, and what to make next.
 
-## Repository structure
+## Planned repository structure
 
 - `apps/web` - Next.js frontend
 - `apps/api` - Go backend API
@@ -16,4 +16,6 @@ Cross-posting is the entry point. Mesh's long-term goal is to help creators lear
 
 ## Current status
 
-Repository skeleton only. No application services or infrastructure have been implemented yet.
+Repository conventions and product documentation only. No application services or infrastructure have been implemented yet.
+
+The project is intentionally developed in small, runnable steps. The next change will add the first Go executable; it will not add application behavior, infrastructure, or external services.
