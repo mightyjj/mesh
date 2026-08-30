@@ -58,3 +58,10 @@ func TestGatewayProxiesHealthToAPI(t *testing.T) {
 		t.Fatalf("expected API response, got %q", body)
 	}
 }
+
+func TestAPIURL(t *testing.T) {
+	t.Setenv("API_URL", "http://api:8080")
+	if got := apiURL(); got != "http://api:8080" {
+		t.Fatalf("expected Compose API URL, got %q", got)
+	}
+}
