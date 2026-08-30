@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -13,11 +15,21 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-func main() {
+func gatewayHandler(apiURL string) http.Handler {
+	target, err := url.Parse(apiURL)
+	if err != nil {
+		panic(err)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler)
+	router.Get("/api/health", http.StripPrefix("/api", proxy).ServeHTTP)
+	return router
+}
 
-	if err := http.ListenAndServe(":8081", router); err != nil {
+func main() {
+	if err := http.ListenAndServe(":8081", gatewayHandler("http://localhost:8080")); err != nil {
 		log.Fatal(err)
 	}
 }
