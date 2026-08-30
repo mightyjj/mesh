@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -28,8 +29,16 @@ func gatewayHandler(apiURL string) http.Handler {
 	return router
 }
 
+func apiURL() string {
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		return "http://localhost:8080"
+	}
+	return apiURL
+}
+
 func main() {
-	if err := http.ListenAndServe(":8081", gatewayHandler("http://localhost:8080")); err != nil {
+	if err := http.ListenAndServe(":8081", gatewayHandler(apiURL())); err != nil {
 		log.Fatal(err)
 	}
 }
