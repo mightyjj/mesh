@@ -13,13 +13,21 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  api:
-    build: ./apps/api
+  migrate:
+    build: ./apps/api/migrations
     environment:
       DATABASE_URL: postgres://mesh:mesh@db:5432/mesh?sslmode=disable
     depends_on:
       db:
         condition: service_healthy
+
+  api:
+    build: ./apps/api
+    environment:
+      DATABASE_URL: postgres://mesh:mesh@db:5432/mesh?sslmode=disable
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   gateway:
     build: ./apps/gateway
