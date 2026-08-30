@@ -9,7 +9,7 @@ means it is merged into `main`; the detailed product rationale remains in the
 - [x] Repository conventions - ignore generated files and secrets, define tab indentation, and document the planned layout. Verify with Git ignore checks and whitespace checks.
 - [x] API executable - add a standalone Go module that starts successfully. Verify with `go run .` and `go build`.
 - [x] Gateway executable - add a standalone Go module that starts successfully. Verify with `go run .` and `go build`.
-- [ ] Web starter - add the smallest Next.js and TypeScript application. Verify with `npm run dev`.
+- [x] Web starter - add the smallest Next.js and TypeScript application. Verify with `npm run dev`.
 - [ ] API health endpoint - return `{"status":"ok"}` from `GET /health`. Verify with one Go test and `curl`.
 - [ ] Gateway health endpoint - return `{"status":"ok"}` from its own `GET /health`. Verify with one Go test and `curl`.
 - [ ] Gateway API proxy - proxy only `/api/health` to the API. Verify a request through the gateway reaches the API.
