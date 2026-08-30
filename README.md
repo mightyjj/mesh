@@ -16,4 +16,4 @@ Cross-posting is the entry point. Mesh's long-term goal is to help creators lear
 
 ## Current status
 
-The project is intentionally developed in small, runnable steps. No application services or infrastructure have been implemented yet.
+The project is intentionally developed in small, runnable steps. Initial application starters are in place, but no product behavior or infrastructure has been implemented yet.
