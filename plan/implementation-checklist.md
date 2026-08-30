@@ -13,7 +13,7 @@ means it is merged into `main`; the detailed product rationale remains in the
 - [x] API health endpoint - return `{"status":"ok"}` from `GET /health`. Verify with one Go test and `curl`.
 - [x] Gateway health endpoint - return `{"status":"ok"}` from its own `GET /health`. Verify with one Go test and `curl`.
 - [x] Gateway API proxy - proxy only `/api/health` to the API. Verify a request through the gateway reaches the API.
-- [ ] Web health display - show the API health result through the gateway. Verify the browser-to-API path locally.
+- [x] Web health display - show the API health result through the gateway. Verify the browser-to-API path locally.
 
 ## Local Product Data
 
