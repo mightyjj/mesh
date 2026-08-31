@@ -20,7 +20,7 @@ means it is merged into `main`; the detailed product rationale remains in the
 - [x] Local containers - add Docker Compose for the working API, gateway, and web applications. Verify `docker compose up` starts them.
 - [x] PostgreSQL connectivity - add a local PostgreSQL container and an API connectivity check. Verify the API reaches the database.
 - [x] Migrations - introduce one migration tool and an initial `users` table. Verify applying the migration to a clean local database.
-- [ ] Users - create and fetch users through the API. Verify with API tests against the database.
+- [x] Users - create and fetch users through the API. Verify with API tests against the database.
 - [ ] Authentication - add hosted authentication and map its identity to an internal user. Verify a protected route rejects anonymous access.
 
 ## Content and Fake Publishing

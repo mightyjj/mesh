@@ -8,6 +8,10 @@ const nextConfig = {
 				source: "/api/health",
 				destination: `${gatewayURL}/api/health`,
 			},
+			{
+				source: "/api/users/:path*",
+				destination: `${gatewayURL}/api/users/:path*`,
+			},
 		];
 	},
 };
