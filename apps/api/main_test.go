@@ -51,3 +51,16 @@ func TestHealthChecksDatabase(t *testing.T) {
 		})
 	}
 }
+
+func TestMeRejectsAnonymousRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/me", nil)
+	newRouter(nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+	if body := recorder.Body.String(); body != `{"error":"authentication required"}` {
+		t.Fatalf("expected body %q, got %q", `{"error":"authentication required"}`, body)
+	}
+}

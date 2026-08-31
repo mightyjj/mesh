@@ -9,6 +9,10 @@ const nextConfig = {
 				destination: `${gatewayURL}/api/health`,
 			},
 			{
+				source: "/api/me",
+				destination: `${gatewayURL}/api/me`,
+			},
+			{
 				source: "/api/users/:path*",
 				destination: `${gatewayURL}/api/users/:path*`,
 			},

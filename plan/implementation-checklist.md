@@ -21,7 +21,7 @@ means it is merged into `main`; the detailed product rationale remains in the
 - [x] PostgreSQL connectivity - add a local PostgreSQL container and an API connectivity check. Verify the API reaches the database.
 - [x] Migrations - introduce one migration tool and an initial `users` table. Verify applying the migration to a clean local database.
 - [x] Users - create and fetch users through the API. Verify with API tests against the database.
-- [ ] Authentication - add hosted authentication and map its identity to an internal user. Verify a protected route rejects anonymous access.
+- [x] Authentication - add hosted Clerk authentication and map its identity to an internal user through `/me`. Verify the protected route rejects anonymous access.
 
 ## Content and Fake Publishing
 
