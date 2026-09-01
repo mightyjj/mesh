@@ -127,7 +127,7 @@ func TestGatewayProxiesContentMethodsAndRequest(t *testing.T) {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":1,"title":"through gateway"}`))
+		_, _ = w.Write([]byte(`{"content_id":1,"title":"through gateway"}`))
 	}))
 	defer api.Close()
 
@@ -158,7 +158,7 @@ func TestGatewayProxiesContentMethodsAndRequest(t *testing.T) {
 		if response.StatusCode != http.StatusOK {
 			t.Fatalf("expected status %d for %s, got %d", http.StatusOK, test.method, response.StatusCode)
 		}
-		if string(body) != `{"id":1,"title":"through gateway"}` {
+		if string(body) != `{"content_id":1,"title":"through gateway"}` {
 			t.Fatalf("expected API response for %s, got %q", test.method, body)
 		}
 	}

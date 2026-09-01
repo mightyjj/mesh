@@ -13,7 +13,7 @@ import (
 )
 
 type content struct {
-	ID        int64     `json:"id"`
+	ContentID int64     `json:"content_id"`
 	CreatorID int64     `json:"-"`
 	Title     string    `json:"title"`
 	CreatedAt time.Time `json:"created_at"`
@@ -27,7 +27,7 @@ type createContentRequest struct {
 const contentColumns = "content_id, creator_id, title, created_at, updated_at"
 
 func scanContent(scanner rowScanner, target *content) error {
-	return scanner.Scan(&target.ID, &target.CreatorID, &target.Title, &target.CreatedAt, &target.UpdatedAt)
+	return scanner.Scan(&target.ContentID, &target.CreatorID, &target.Title, &target.CreatedAt, &target.UpdatedAt)
 }
 
 func createContentHandler(db *sql.DB) http.HandlerFunc {

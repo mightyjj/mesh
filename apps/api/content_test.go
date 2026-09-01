@@ -108,7 +108,7 @@ func TestContentCreateAndListAgainstPostgres(t *testing.T) {
 		if err := json.NewDecoder(strings.NewReader(body)).Decode(&item); err != nil {
 			t.Fatal(err)
 		}
-		if item.ID < 1 || item.Title == "" {
+		if item.ContentID < 1 || item.Title == "" {
 			t.Fatalf("unexpected created content: %+v", item)
 		}
 		if strings.Contains(body, "creator_id") {
