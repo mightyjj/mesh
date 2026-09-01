@@ -35,8 +35,12 @@ func TestContentConstraintsAgainstPostgres(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), "DELETE FROM users WHERE id = $1", userID)
 	})
 
-	if _, err := db.ExecContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'First upload')", userID); err != nil {
+	var contentID int64
+	if err := db.QueryRowContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'First upload') RETURNING content_id", userID).Scan(&contentID); err != nil {
 		t.Fatal(err)
+	}
+	if contentID < 1 {
+		t.Fatalf("expected generated content_id, got %d", contentID)
 	}
 	_, err = db.ExecContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, '   ')", userID)
 	assertPostgresCode(t, err, "23514")
