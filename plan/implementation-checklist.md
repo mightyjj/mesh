@@ -25,7 +25,7 @@ means it is merged into `main`; the detailed product rationale remains in the
 
 ## Content and Fake Publishing
 
-- [ ] Content metadata - persist a user's content record without media upload. Verify create and list operations.
+- [x] Content metadata - persist a user's content record without media upload. Verify create and list operations.
 - [ ] Local media upload - attach one media file to content and store it locally. Verify upload validation and persisted metadata.
 - [ ] Platform accounts - persist a manually created fake platform account. Verify it belongs to the signed-in user.
 - [ ] Posts - persist the relationship between content, a platform account, and its platform-specific post. Verify one content item can have multiple posts.
