@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -60,41 +59,50 @@ func TestGatewayProxiesHealthToAPI(t *testing.T) {
 	}
 }
 
-func TestGatewayProxiesUsersToAPI(t *testing.T) {
+func TestGatewayProxiesMeToAPI(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected method %s, got %s", http.MethodPost, r.Method)
+		if r.Method != http.MethodGet {
+			t.Errorf("expected method %s, got %s", http.MethodGet, r.Method)
 		}
-		if r.URL.Path != "/users" {
-			t.Errorf("expected path /users, got %s", r.URL.Path)
+		if r.URL.Path != "/me" {
+			t.Errorf("expected path /me, got %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":1}`))
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"authentication required"}`))
 	}))
 	defer api.Close()
 
 	gateway := httptest.NewServer(gatewayHandler(api.URL))
 	defer gateway.Close()
 
-	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/users", strings.NewReader(`{"email":"test@example.com"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := http.Get(gateway.URL + "/api/me")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.StatusCode)
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, response.StatusCode)
 	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != `{"id":1}` {
+	if string(body) != `{"error":"authentication required"}` {
 		t.Fatalf("expected API response, got %q", body)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.StatusCode)
 	}
 }
 

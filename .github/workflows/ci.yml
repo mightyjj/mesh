@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.25.x
+          cache-dependency-path: |
+            apps/api/go.sum
+            apps/gateway/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Test and audit API
+        working-directory: apps/api
+        run: |
+          go test ./...
+          go vet ./...
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - name: Test and audit gateway
+        working-directory: apps/gateway
+        run: |
+          go test ./...
+          go vet ./...
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Audit web dependencies
+        working-directory: apps/web
+        run: npm audit --audit-level=high
+
+      - name: Build web
+        working-directory: apps/web
+        run: npm run build
