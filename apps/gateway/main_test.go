@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -103,6 +104,79 @@ func TestGatewayProxiesMeToAPI(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.StatusCode)
+	}
+}
+
+func TestGatewayProxiesContentMethodsAndRequest(t *testing.T) {
+	var calls int
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/content" {
+			t.Errorf("expected path /content, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("expected authorization header to pass through, got %q", got)
+		}
+		if r.Method == http.MethodPost {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(body) != `{"title":"through gateway"}` {
+				t.Errorf("expected request body to pass through, got %q", body)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content_id":1,"title":"through gateway"}`))
+	}))
+	defer api.Close()
+
+	gateway := httptest.NewServer(gatewayHandler(api.URL))
+	defer gateway.Close()
+
+	for _, test := range []struct {
+		method string
+		body   string
+	}{
+		{http.MethodGet, ""},
+		{http.MethodPost, `{"title":"through gateway"}`},
+	} {
+		request, err := http.NewRequest(test.method, gateway.URL+"/api/content", strings.NewReader(test.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer test-token")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("expected status %d for %s, got %d", http.StatusOK, test.method, response.StatusCode)
+		}
+		if string(body) != `{"content_id":1,"title":"through gateway"}` {
+			t.Fatalf("expected API response for %s, got %q", test.method, body)
+		}
+	}
+
+	request, err := http.NewRequest(http.MethodPut, gateway.URL+"/api/content", strings.NewReader(`{"title":"rejected"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d for unsupported method, got %d", http.StatusMethodNotAllowed, response.StatusCode)
+	}
+	if calls != 2 {
+		t.Fatalf("expected only GET and POST to reach API, got %d calls", calls)
 	}
 }
 
