@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -48,20 +47,7 @@ type user struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type content struct {
-	ID        int64     `json:"id"`
-	CreatorID int64     `json:"-"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type createContentRequest struct {
-	Title string `json:"title"`
-}
-
 const userColumns = "id, clerk_user_id, email, display_name, created_at, updated_at"
-const contentColumns = "id, creator_id, title, created_at, updated_at"
 
 var clerkAuthorizedParties = []string{"http://localhost:3000"}
 
@@ -74,10 +60,6 @@ func scanUser(scanner rowScanner, target *user) error {
 	err := scanner.Scan(&target.ID, &clerkUserID, &target.Email, &target.DisplayName, &target.CreatedAt, &target.UpdatedAt)
 	target.ClerkUserID = clerkUserID.String
 	return err
-}
-
-func scanContent(scanner rowScanner, target *content) error {
-	return scanner.Scan(&target.ID, &target.CreatorID, &target.Title, &target.CreatedAt, &target.UpdatedAt)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -93,91 +75,6 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
-}
-
-func createContentHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "private, no-store")
-
-		claims, ok := clerk.SessionClaimsFromContext(r.Context())
-		if !ok || claims == nil || claims.Subject == "" {
-			writeError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-
-		var input createContentRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		if err := decoder.Decode(&input); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-			writeError(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-		input.Title = strings.TrimSpace(input.Title)
-		if input.Title == "" {
-			writeError(w, http.StatusBadRequest, "title is required")
-			return
-		}
-
-		var created content
-		err := scanContent(db.QueryRowContext(
-			r.Context(),
-			"INSERT INTO content (creator_id, title) SELECT id, $2 FROM users WHERE clerk_user_id = $1 RETURNING "+contentColumns,
-			claims.Subject,
-			input.Title,
-		), &created)
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusConflict, "current user is not initialized")
-			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not create content")
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, created)
-	}
-}
-
-func listContentHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "private, no-store")
-
-		claims, ok := clerk.SessionClaimsFromContext(r.Context())
-		if !ok || claims == nil || claims.Subject == "" {
-			writeError(w, http.StatusUnauthorized, "authentication required")
-			return
-		}
-
-		rows, err := db.QueryContext(
-			r.Context(),
-			"SELECT "+contentColumns+" FROM content WHERE creator_id = (SELECT id FROM users WHERE clerk_user_id = $1) ORDER BY id",
-			claims.Subject,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not list content")
-			return
-		}
-		defer rows.Close()
-
-		items := []content{}
-		for rows.Next() {
-			var item content
-			if err := scanContent(rows, &item); err != nil {
-				writeError(w, http.StatusInternalServerError, "could not list content")
-				return
-			}
-			items = append(items, item)
-		}
-		if err := rows.Err(); err != nil {
-			writeError(w, http.StatusInternalServerError, "could not list content")
-			return
-		}
-
-		writeJSON(w, http.StatusOK, items)
-	}
 }
 
 func clerkUserProfile(ctx context.Context, clerkUserID string) (string, string, error) {
@@ -281,8 +178,6 @@ func newRouter(db *sql.DB) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler(db))
 	router.Get("/me", requireClerkAuthorization(meHandler(db)).ServeHTTP)
-	router.Get("/content", requireClerkAuthorization(listContentHandler(db)).ServeHTTP)
-	router.Post("/content", requireClerkAuthorization(createContentHandler(db)).ServeHTTP)
 	return router
 }
 
