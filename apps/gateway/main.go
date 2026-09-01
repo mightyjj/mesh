@@ -27,7 +27,7 @@ func gatewayHandler(apiURL string) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler)
 	router.Get("/api/health", apiProxy.ServeHTTP)
-	router.Handle("/api/me", apiProxy)
+	router.Get("/api/me", apiProxy.ServeHTTP)
 	return router
 }
 

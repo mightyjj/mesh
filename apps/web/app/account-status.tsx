@@ -17,7 +17,10 @@ export default function AccountStatus() {
 		}
 
 		getToken()
-			.then((token) => fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } }))
+			.then((token) => {
+				if (!token) throw new Error("Could not load session token");
+				return fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } });
+			})
 			.then((response) => {
 				if (!response.ok) throw new Error("Could not load current user");
 				setUser("ready");

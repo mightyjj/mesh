@@ -49,7 +49,7 @@ type user struct {
 
 const userColumns = "id, clerk_user_id, email, display_name, created_at, updated_at"
 
-var clerkAuthorizedParties = []string{"http://localhost:3000", "https://app.mesh.com"}
+var clerkAuthorizedParties = []string{"http://localhost:3000"}
 
 type rowScanner interface {
 	Scan(...any) error
@@ -124,6 +124,8 @@ func clerkUserProfile(ctx context.Context, clerkUserID string) (string, string, 
 
 func meHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+
 		claims, ok := clerk.SessionClaimsFromContext(r.Context())
 		if !ok || claims == nil || claims.Subject == "" {
 			writeError(w, http.StatusUnauthorized, "authentication required")
@@ -175,7 +177,7 @@ func meHandler(db *sql.DB) http.HandlerFunc {
 func newRouter(db *sql.DB) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler(db))
-	router.Handle("/me", requireClerkAuthorization(meHandler(db)))
+	router.Get("/me", requireClerkAuthorization(meHandler(db)).ServeHTTP)
 	return router
 }
 

@@ -91,6 +91,19 @@ func TestGatewayProxiesMeToAPI(t *testing.T) {
 	if string(body) != `{"error":"authentication required"}` {
 		t.Fatalf("expected API response, got %q", body)
 	}
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, response.StatusCode)
+	}
 }
 
 func TestAPIURL(t *testing.T) {

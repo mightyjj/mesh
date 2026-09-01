@@ -97,6 +97,9 @@ func TestMeMapsClerkUserAgainstPostgres(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, recorder.Code, recorder.Body.String())
 	}
+	if cacheControl := recorder.Header().Get("Cache-Control"); cacheControl != "private, no-store" {
+		t.Fatalf("expected private no-store cache control, got %q", cacheControl)
+	}
 
 	var mapped user
 	if err := json.NewDecoder(recorder.Body).Decode(&mapped); err != nil {

@@ -4,8 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +30,7 @@ func TestAuthorizedParties(t *testing.T) {
 	}
 	for party, want := range map[string]bool{
 		"http://localhost:3000":    true,
-		"https://app.mesh.com":     true,
+		"https://app.mesh.com":     false,
 		"https://attacker.example": false,
 	} {
 		if got := params.AuthorizedPartyHandler(party); got != want {
@@ -45,24 +44,27 @@ func TestAuthorizationBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	publicKey, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pemKey := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKey}))
 
-	middleware := clerkhttp.WithHeaderAuthorization(
-		clerkhttp.JSONWebKey(pemKey),
-		clerkhttp.AuthorizedPartyMatches(clerkAuthorizedParties...),
-		clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		})),
-	)
-	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := clerk.SessionClaimsFromContext(r.Context()); !ok {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+	const keyID = "test-key"
+	jwk := jose.JSONWebKey{Key: &privateKey.PublicKey, KeyID: keyID, Algorithm: string(jose.RS256), Use: "sig"}
+	clerkAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/jwks" {
+			t.Errorf("expected Clerk JWKS path /jwks, got %s", r.URL.Path)
 		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []jose.JSONWebKey{jwk}})
+	}))
+	defer clerkAPI.Close()
+
+	previousBackend := clerk.GetBackend()
+	clerk.SetBackend(clerk.NewBackend(&clerk.BackendConfig{
+		HTTPClient: clerkAPI.Client(),
+		URL:        &clerkAPI.URL,
+		Key:        clerk.String("test"),
+	}))
+	t.Cleanup(func() { clerk.SetBackend(previousBackend) })
+
+	handler := requireClerkAuthorization(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
@@ -70,10 +72,10 @@ func TestAuthorizationBoundary(t *testing.T) {
 		name, token string
 		status      int
 	}{
-		{"valid", signedToken(t, privateKey, "http://localhost:3000", time.Now().Add(time.Minute)), http.StatusNoContent},
-		{"expired", signedToken(t, privateKey, "http://localhost:3000", time.Now().Add(-time.Minute)), http.StatusUnauthorized},
+		{"valid", signedToken(t, privateKey, keyID, "http://localhost:3000", time.Now().Add(time.Minute)), http.StatusNoContent},
+		{"expired", signedToken(t, privateKey, keyID, "http://localhost:3000", time.Now().Add(-time.Minute)), http.StatusUnauthorized},
 		{"malformed", "not-a-jwt", http.StatusUnauthorized},
-		{"wrong authorized party", signedToken(t, privateKey, "https://attacker.example", time.Now().Add(time.Minute)), http.StatusUnauthorized},
+		{"wrong authorized party", signedToken(t, privateKey, keyID, "https://attacker.example", time.Now().Add(time.Minute)), http.StatusUnauthorized},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/me", nil)
@@ -87,9 +89,12 @@ func TestAuthorizationBoundary(t *testing.T) {
 	}
 }
 
-func signedToken(t *testing.T, privateKey *rsa.PrivateKey, authorizedParty string, expiresAt time.Time) string {
+func signedToken(t *testing.T, privateKey *rsa.PrivateKey, keyID, authorizedParty string, expiresAt time.Time) string {
 	t.Helper()
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: privateKey}, nil)
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: privateKey},
+		(&jose.SignerOptions{}).WithHeader(jose.HeaderKey("kid"), keyID),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,5 +163,15 @@ func TestMeRejectsAnonymousRequest(t *testing.T) {
 	}
 	if body := recorder.Body.String(); body != `{"error":"authentication required"}` {
 		t.Fatalf("expected body %q, got %q", `{"error":"authentication required"}`, body)
+	}
+}
+
+func TestMeRejectsNonGetRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/me", nil)
+	newRouter(nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
 	}
 }
