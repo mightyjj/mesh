@@ -178,6 +178,8 @@ func newRouter(db *sql.DB) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler(db))
 	router.Get("/me", requireClerkAuthorization(meHandler(db)).ServeHTTP)
+	router.Get("/content", requireClerkAuthorization(listContentHandler(db)).ServeHTTP)
+	router.Post("/content", requireClerkAuthorization(createContentHandler(db)).ServeHTTP)
 	return router
 }
 

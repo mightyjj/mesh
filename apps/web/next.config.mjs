@@ -12,6 +12,10 @@ const nextConfig = {
 				source: "/api/me",
 				destination: `${gatewayURL}/api/me`,
 			},
+			{
+				source: "/api/content",
+				destination: `${gatewayURL}/api/content`,
+			},
 		];
 	},
 };

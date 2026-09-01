@@ -60,7 +60,7 @@ status and deterministic external ID in the browser.
 
 ### M1.2: Create and list owned content
 
-- [ ] Add authenticated `POST /content` and `GET /content` routes through the
+- [x] Add authenticated `POST /content` and `GET /content` routes through the
   API, gateway, and web rewrite.
 - Scope: non-empty title validation, current-user ownership, stable JSON, and
   user-scoped listing.

@@ -28,6 +28,8 @@ func gatewayHandler(apiURL string) http.Handler {
 	router.Get("/health", healthHandler)
 	router.Get("/api/health", apiProxy.ServeHTTP)
 	router.Get("/api/me", apiProxy.ServeHTTP)
+	router.Get("/api/content", apiProxy.ServeHTTP)
+	router.Post("/api/content", apiProxy.ServeHTTP)
 	return router
 }
 
