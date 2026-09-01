@@ -52,7 +52,7 @@ status and deterministic external ID in the browser.
 
 ### M1.1: Persist content metadata
 
-- [ ] Add a Goose migration for `content` with an owner, title, and timestamps.
+- [x] Add a Goose migration for `content` with an owner, title, and timestamps.
 - Scope: schema, foreign key to `users`, and migration verification.
 - Out of scope: HTTP routes, media fields, posts, and UI.
 - Verify: migrate up on a clean database, enforce ownership and required title
