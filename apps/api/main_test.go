@@ -7,12 +7,29 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	clerkhttp "github.com/clerk/clerk-sdk-go/v2/http"
 	"github.com/go-chi/chi/v5"
 )
 
 type fakePinger struct {
 	err    error
 	called bool
+}
+
+func TestAuthorizedParties(t *testing.T) {
+	params := &clerkhttp.AuthorizationParams{}
+	if err := clerkhttp.AuthorizedPartyMatches("http://localhost:3000", "https://app.mesh.com")(params); err != nil {
+		t.Fatal(err)
+	}
+	for party, want := range map[string]bool{
+		"http://localhost:3000":    true,
+		"https://app.mesh.com":     true,
+		"https://attacker.example": false,
+	} {
+		if got := params.AuthorizedPartyHandler(party); got != want {
+			t.Errorf("authorized party %q: expected %t, got %t", party, want, got)
+		}
+	}
 }
 
 func (p *fakePinger) PingContext(context.Context) error {

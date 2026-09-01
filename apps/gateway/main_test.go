@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -56,44 +55,6 @@ func TestGatewayProxiesHealthToAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(body) != `{"status":"from-api"}` {
-		t.Fatalf("expected API response, got %q", body)
-	}
-}
-
-func TestGatewayProxiesUsersToAPI(t *testing.T) {
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected method %s, got %s", http.MethodPost, r.Method)
-		}
-		if r.URL.Path != "/users" {
-			t.Errorf("expected path /users, got %s", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":1}`))
-	}))
-	defer api.Close()
-
-	gateway := httptest.NewServer(gatewayHandler(api.URL))
-	defer gateway.Close()
-
-	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/users", strings.NewReader(`{"email":"test@example.com"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.StatusCode)
-	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(body) != `{"id":1}` {
 		t.Fatalf("expected API response, got %q", body)
 	}
 }

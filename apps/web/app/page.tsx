@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AccountStatus from "./account-status";
 
 type HealthState = "loading" | "healthy" | "error";
-
 export default function Home() {
 	const [health, setHealth] = useState<HealthState>("loading");
 
@@ -46,6 +46,7 @@ export default function Home() {
 				{health === "healthy" && <p role="status">API is healthy.</p>}
 				{health === "error" && <p role="alert">API health check failed.</p>}
 			</section>
+			{process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && <AccountStatus />}
 		</main>
 	);
 }

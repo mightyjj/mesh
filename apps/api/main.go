@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,16 +40,11 @@ func healthHandler(db dbPinger) http.HandlerFunc {
 
 type user struct {
 	ID          int64     `json:"id"`
-	ClerkUserID string    `json:"clerk_user_id,omitempty"`
+	ClerkUserID string    `json:"-"`
 	Email       string    `json:"email"`
 	DisplayName string    `json:"display_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-type createUserRequest struct {
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
 }
 
 const userColumns = "id, clerk_user_id, email, display_name, created_at, updated_at"
@@ -82,74 +75,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-func createUserHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var input createUserRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-		if err := decoder.Decode(&input); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-			writeError(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-
-		input.Email = strings.TrimSpace(input.Email)
-		input.DisplayName = strings.TrimSpace(input.DisplayName)
-		if input.Email == "" || input.DisplayName == "" {
-			writeError(w, http.StatusBadRequest, "email and display_name are required")
-			return
-		}
-
-		var created user
-		err := scanUser(db.QueryRowContext(
-			r.Context(),
-			"INSERT INTO users (email, display_name) VALUES ($1, $2) RETURNING "+userColumns,
-			input.Email,
-			input.DisplayName,
-		), &created)
-		if err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-				writeError(w, http.StatusConflict, "email already exists")
-				return
-			}
-			writeError(w, http.StatusInternalServerError, "could not create user")
-			return
-		}
-
-		writeJSON(w, http.StatusCreated, created)
-	}
-}
-
-func getUserHandler(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-		if err != nil || id < 1 {
-			writeError(w, http.StatusBadRequest, "invalid user id")
-			return
-		}
-
-		var found user
-		err = scanUser(db.QueryRowContext(
-			r.Context(),
-			"SELECT "+userColumns+" FROM users WHERE id = $1",
-			id,
-		), &found)
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not fetch user")
-			return
-		}
-
-		writeJSON(w, http.StatusOK, found)
-	}
-}
-
 func clerkUserProfile(ctx context.Context, clerkUserID string) (string, string, error) {
 	profile, err := clerkuser.Get(ctx, clerkUserID)
 	if err != nil {
@@ -159,7 +84,7 @@ func clerkUserProfile(ctx context.Context, clerkUserID string) (string, string, 
 	email := ""
 	if profile.PrimaryEmailAddressID != nil {
 		for _, address := range profile.EmailAddresses {
-			if address != nil && address.ID == *profile.PrimaryEmailAddressID {
+			if address != nil && address.ID == *profile.PrimaryEmailAddressID && address.Verification != nil && address.Verification.Status == "verified" {
 				email = address.EmailAddress
 				break
 			}
@@ -167,7 +92,7 @@ func clerkUserProfile(ctx context.Context, clerkUserID string) (string, string, 
 	}
 	if email == "" {
 		for _, address := range profile.EmailAddresses {
-			if address != nil {
+			if address != nil && address.Verification != nil && address.Verification.Status == "verified" {
 				email = address.EmailAddress
 				break
 			}
@@ -226,20 +151,11 @@ func meHandler(db *sql.DB) http.HandlerFunc {
 
 		err = scanUser(db.QueryRowContext(
 			r.Context(),
-			"UPDATE users SET clerk_user_id = $1, display_name = $2, updated_at = CURRENT_TIMESTAMP WHERE email = $3 AND clerk_user_id IS NULL RETURNING "+userColumns,
+			"INSERT INTO users (clerk_user_id, email, display_name) VALUES ($1, $2, $3) ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = CURRENT_TIMESTAMP RETURNING "+userColumns,
 			claims.Subject,
-			displayName,
 			email,
+			displayName,
 		), &found)
-		if errors.Is(err, sql.ErrNoRows) {
-			err = scanUser(db.QueryRowContext(
-				r.Context(),
-				"INSERT INTO users (clerk_user_id, email, display_name) VALUES ($1, $2, $3) ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = CURRENT_TIMESTAMP RETURNING "+userColumns,
-				claims.Subject,
-				email,
-				displayName,
-			), &found)
-		}
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -257,11 +173,10 @@ func meHandler(db *sql.DB) http.HandlerFunc {
 func newRouter(db *sql.DB) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/health", healthHandler(db))
-	router.Post("/users", createUserHandler(db))
-	router.Get("/users/{id}", getUserHandler(db))
 	router.Handle(
 		"/me",
 		clerkhttp.WithHeaderAuthorization(
+			clerkhttp.AuthorizedPartyMatches("http://localhost:3000", "https://app.mesh.com"),
 			clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				writeError(w, http.StatusUnauthorized, "invalid authentication")
 			})),
@@ -278,9 +193,11 @@ func databaseURL() string {
 }
 
 func main() {
-	if secretKey := os.Getenv("CLERK_SECRET_KEY"); secretKey != "" {
-		clerk.SetKey(secretKey)
+	secretKey := os.Getenv("CLERK_SECRET_KEY")
+	if secretKey == "" {
+		log.Fatal("CLERK_SECRET_KEY is required")
 	}
+	clerk.SetKey(secretKey)
 
 	db, err := sql.Open("pgx", databaseURL())
 	if err != nil {
