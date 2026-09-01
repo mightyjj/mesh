@@ -947,6 +947,11 @@ per PR.
 
 # 15. Initial PR Roadmap
 
+> Historical note: this was the bootstrap sequence used to establish the
+> repository. It is not the active implementation plan and its PR numbers do
+> not correspond to current GitHub pull requests. Continue from the
+> [implementation plan](implementation-checklist.md).
+
 ## PR #1 — Repository Skeleton
 
 Create:
@@ -1770,6 +1775,9 @@ Example:
 
 # 19. First Codex Task
 
+> Historical note: this task is complete. Use the
+> [implementation plan](implementation-checklist.md) for current work.
+
 Start with **PR #1 only**.
 
 Do not implement PR #2 yet.
@@ -1901,4 +1909,3 @@ The goal is that at any point in the project, if someone asks:
 > "Why does this component exist?"
 
 the developer can answer clearly.
-
