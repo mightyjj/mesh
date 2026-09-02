@@ -11,6 +11,20 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: mesh
+          POSTGRES_USER: mesh
+          POSTGRES_PASSWORD: mesh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mesh -d mesh"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -24,8 +38,19 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      - name: Install Goose
+        run: go install -tags='no_clickhouse no_libsql no_mssql no_mysql no_sqlite3 no_vertica no_ydb' github.com/pressly/goose/v3/cmd/goose@v3.25.0
+
+      - name: Apply API migrations
+        env:
+          DATABASE_URL: postgres://mesh:mesh@localhost:5432/mesh?sslmode=disable
+        run: |
+          "$(go env GOPATH)/bin/goose" -dir apps/api/migrations postgres "$DATABASE_URL" up
+
       - name: Test and audit API
         working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://mesh:mesh@localhost:5432/mesh?sslmode=disable
         run: |
           go test ./...
           go vet ./...
