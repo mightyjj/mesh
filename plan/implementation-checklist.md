@@ -9,7 +9,8 @@ behavior, keep `main` runnable, state what is out of scope, and include the
 smallest verification that would fail if the behavior broke.
 
 Milestone IDs such as `M1.4` are stable plan references, not predicted GitHub
-pull request numbers.
+pull request numbers. Work inserted into a committed sequence takes a letter
+suffix, such as `M1.2a`, so existing IDs keep their meaning.
 
 Only the current milestone is committed. Before starting another milestone,
 review its purpose, completion gate, assumptions, and PR breakdown with the
@@ -68,11 +69,40 @@ status and deterministic external ID in the browser.
 - Verify: anonymous access is rejected, invalid input is rejected, a created
   record is returned, and one user cannot list another user's content.
 
+### M1.2a: Run the database tests in CI
+
+- [ ] Add a PostgreSQL service and a migration step to the pull request
+  workflow so the `DATABASE_URL` tests run instead of skipping.
+- Why now: content ownership is the product's central promise, and every test
+  that proves it currently skips in CI.
+- Scope: one CI service container, applying Goose migrations before the Go
+  tests, and passing `DATABASE_URL` to the API test job.
+- Out of scope: new tests, test refactoring, coverage reporting, and any
+  deployment concern.
+- Verify: removing the creator scope from `GET /content` fails the workflow.
+
+### M1.2b: List and create content in the web app
+
+- [ ] Add the smallest signed-in page that lists owned content and creates one
+  item from a title.
+- Why now: M1.3 through M1.8 otherwise land with no browser-verifiable
+  behavior, and the title field is where a creator first meets the difference
+  between a content item and a published post.
+- Scope: native accessible form and list, signed-out, loading, empty, and error
+  states, and removing the API health and account status readouts from the
+  page.
+- Out of scope: media, publishing, accounts, editing, deletion, pagination, and
+  styling.
+- Verify: web build passes, a signed-out visitor sees only sign-in, and a
+  manual browser check creates an item that appears in the list.
+
 ### M1.3: Add local media metadata
 
 - [ ] Add nullable media metadata to `content` for one original file.
 - Scope: original filename, MIME type, byte size, and local storage key.
 - Out of scope: file transfer, multiple assets, thumbnails, and S3.
+- Decision: one content item has exactly one media file. Revisit at the
+  milestone review if creators publish platform-specific cuts of one creative.
 - Verify: migrate existing content safely and enforce one valid metadata shape
   when a storage key is present.
 
@@ -81,12 +111,22 @@ status and deterministic external ID in the browser.
 - [ ] Add authenticated `POST /content/{id}/media` for one owned content item.
 - Scope: streaming multipart input to a configurable local directory, a fixed
   size limit, an explicit allowlist of supported MIME types, collision-safe
-  storage keys, persisted metadata, and a Docker volume for the media directory.
+  storage keys, persisted metadata, gateway and web routing for content
+  sub-paths, and a Docker volume for the media directory.
 - Out of scope: downloads, resumable upload, transcoding, virus scanning, and
   cloud storage.
+- Decision: rejected uploads return distinguishable messages naming the real
+  size limit and the accepted types, so the web app can display them verbatim.
+  The metadata update sets `updated_at`.
 - Verify: reject anonymous, oversized, unsupported, and foreign-user uploads;
   save one valid file and its metadata; retain it across an API container
   restart; remove a partially saved file when the database update fails.
+
+### Review after M1.4
+
+Before building on the first uploaded file, confirm the upload error messages
+read clearly to somebody who is not the developer, and that keeping a content
+item whose upload failed is understandable rather than confusing.
 
 ### M1.5: Persist platform accounts
 
@@ -94,6 +134,8 @@ status and deterministic external ID in the browser.
 - Scope: platform, external account ID, display name, timestamps, and a unique
   external identity per platform.
 - Out of scope: OAuth credentials, tokens, and HTTP routes.
+- Decision: store `platform` as text with a check constraint, so supporting one
+  more platform is a migration rather than a type change.
 - Verify: migrate up and down, reject duplicate external identities, and
   enforce user ownership.
 
@@ -102,14 +144,16 @@ status and deterministic external ID in the browser.
 - [ ] Add authenticated create and list routes for `fake` platform accounts.
 - Scope: current-user ownership and deterministic local account data.
 - Out of scope: real providers, OAuth, update, and delete.
+- Decision: creating a test account stays a single action, because connecting a
+  real provider is a redirect and never a data-entry form.
 - Verify: anonymous access is rejected, duplicate accounts are rejected, and
   users cannot list each other's accounts.
 
 ### M1.7: Persist platform-specific posts
 
 - [ ] Add a Goose migration for `posts` linking content to a platform account.
-- Scope: owner-safe relationships, caption, status, external post ID, and
-  timestamps.
+- Scope: owner-safe relationships, caption, status including `failed`, external
+  post ID, and timestamps.
 - Out of scope: a public post-creation route, scheduling, metrics, and retries.
 - Verify: migrate up and down, allow multiple platform posts for one content
   item, and reject relationships across different users.
@@ -121,15 +165,21 @@ status and deterministic external ID in the browser.
   deterministic external ID, and persist `published` status.
 - Out of scope: a generic provider interface, background jobs, retries,
   idempotency, scheduling, and real network calls.
-- Verify: reject invalid ownership and missing media, then prove one request
-  creates the expected saved post and external ID.
+- Decision: a failed publish saves a post with `failed` status, so the web app
+  can state whether anything was posted.
+- Verify: reject invalid ownership and missing media, prove one request creates
+  the expected saved post and external ID, and prove a provider failure saves
+  one `failed` post.
 
-### M1.9: Create content and upload media in the web app
+### M1.9: Attach one media file in the web app
 
-- [ ] Add the smallest signed-in form for a title and one media file.
+- [ ] Extend the M1.2b page so a title and one media file are submitted
+  together.
 - Scope: create content, upload its file, and show success or a useful error.
 - Out of scope: editing, deletion, drag and drop, progress bars, and styling
   beyond accessible native controls.
+- Decision: a content item whose upload fails is kept, and the page says the
+  file did not upload rather than hiding the item.
 - Verify: web build passes and a manual browser check creates a database record
   with a saved local file.
 
@@ -145,7 +195,8 @@ status and deterministic external ID in the browser.
 
 - [ ] Add a caption and publish action for uploaded content and the selected
   fake account.
-- Scope: call the publish route and display saved status and external ID.
+- Scope: call the publish route and display saved status and external ID as
+  labelled fields, so later provider states need no redesign.
 - Out of scope: scheduling, retries, optimistic updates, metrics, and a general
   dashboard.
 - Verify: web build passes and one browser flow completes the milestone gate.
@@ -155,6 +206,16 @@ status and deterministic external ID in the browser.
 Discuss whether `content`, `platform_accounts`, and `posts` express the real
 product clearly; whether synchronous publishing is still sufficient; and what
 the fake loop revealed before freezing an abstraction for a real provider.
+
+Answer before starting M2:
+
+- Does a creator treat the title and the caption as different things without
+  being told twice?
+- Does one content item ever need more than one media file?
+- Is a content item without media confusing enough that media should be
+  required at creation?
+- Does a creator return to a published content item, or is publishing terminal?
+- Is synchronous publishing still tolerable at realistic file sizes?
 
 ## Milestone 2: Publish one real video to YouTube - proposed
 
