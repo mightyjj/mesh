@@ -98,7 +98,7 @@ status and deterministic external ID in the browser.
 
 ### M1.3: Add local media metadata
 
-- [ ] Add nullable media metadata to `content` for one original file.
+- [x] Add nullable media metadata to `content` for one original file.
 - Scope: original filename, MIME type, byte size, and local storage key.
 - Out of scope: file transfer, multiple assets, thumbnails, and S3.
 - Decision: one content item has exactly one media file. Revisit at the
