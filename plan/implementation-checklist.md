@@ -83,7 +83,7 @@ status and deterministic external ID in the browser.
 
 ### M1.2b: List and create content in the web app
 
-- [ ] Add the smallest signed-in page that lists owned content and creates one
+- [x] Add the smallest signed-in page that lists owned content and creates one
   item from a title.
 - Why now: M1.3 through M1.8 otherwise land with no browser-verifiable
   behavior, and the title field is where a creator first meets the difference
