@@ -71,7 +71,7 @@ status and deterministic external ID in the browser.
 
 ### M1.2a: Run the database tests in CI
 
-- [ ] Add a PostgreSQL service and a migration step to the pull request
+- [x] Add a PostgreSQL service and a migration step to the pull request
   workflow so the `DATABASE_URL` tests run instead of skipping.
 - Why now: content ownership is the product's central promise, and every test
   that proves it currently skips in CI.
