@@ -45,7 +45,7 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -179,7 +179,7 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 		t.Fatalf("expected duplicate upload to leave four stored files, got %d", got)
 	}
 
-	if response := performStreamingMediaUpload(t, router, failingContentID, ownerClerkID, maxMediaBytes+1, testMP4); response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "100 MiB") {
+	if response := performStreamingMediaUpload(t, router, failingContentID, ownerClerkID, maxMediaBytes+1, testMP4); response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), fmt.Sprintf("%d MiB", maxMediaBytes>>20)) {
 		t.Fatalf("expected oversized status %d and real limit, got %d: %s", http.StatusRequestEntityTooLarge, response.Code, response.Body.String())
 	}
 	if got := fileCount(); got != 4 {

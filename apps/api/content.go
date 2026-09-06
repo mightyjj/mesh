@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +41,12 @@ const (
 	mediaProbeBytes             = 512
 	defaultMediaDirectory       = "./media"
 	mediaFieldName              = "file"
+)
+
+var (
+	supportedMediaTypes    = []string{"video/mp4", "video/webm"}
+	unsupportedTypeMessage = "file type must be " + strings.Join(supportedMediaTypes, " or ")
+	oversizedMessage       = fmt.Sprintf("file exceeds the %d MiB limit", maxMediaBytes>>20)
 )
 
 func isMaxBytesError(err error) bool {
@@ -179,7 +187,7 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 		probeLength, probeErr := io.ReadFull(part, probe)
 		if probeErr != nil && !errors.Is(probeErr, io.EOF) && !errors.Is(probeErr, io.ErrUnexpectedEOF) {
 			if isMaxBytesError(probeErr) {
-				writeError(w, http.StatusRequestEntityTooLarge, "file exceeds the 100 MiB limit")
+				writeError(w, http.StatusRequestEntityTooLarge, oversizedMessage)
 				return
 			}
 			writeError(w, http.StatusBadRequest, "malformed multipart request")
@@ -196,7 +204,7 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 		copied, err := io.Copy(file, io.LimitReader(part, remaining+1))
 		mediaSize += copied
 		if isMaxBytesError(err) {
-			writeError(w, http.StatusRequestEntityTooLarge, "file exceeds the 100 MiB limit")
+			writeError(w, http.StatusRequestEntityTooLarge, oversizedMessage)
 			return
 		}
 		if err != nil {
@@ -209,7 +217,7 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		if mediaSize > maxMediaBytes {
-			writeError(w, http.StatusRequestEntityTooLarge, "file exceeds the 100 MiB limit")
+			writeError(w, http.StatusRequestEntityTooLarge, oversizedMessage)
 			return
 		}
 
@@ -222,8 +230,8 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		detectedMIMEType := http.DetectContentType(probe)
-		if detectedMIMEType != "video/mp4" && detectedMIMEType != "video/webm" {
-			writeError(w, http.StatusUnsupportedMediaType, "file type must be video/mp4 or video/webm")
+		if !slices.Contains(supportedMediaTypes, detectedMIMEType) {
+			writeError(w, http.StatusUnsupportedMediaType, unsupportedTypeMessage)
 			return
 		}
 		if err := closeFile(); err != nil {
