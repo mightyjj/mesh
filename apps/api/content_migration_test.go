@@ -74,7 +74,7 @@ func TestContentMediaMetadataConstraintsAgainstPostgres(t *testing.T) {
 	})
 
 	var contentID int64
-	if err := db.QueryRowContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'Pre-migration content') RETURNING content_id", userID).Scan(&contentID); err != nil {
+	if err := db.QueryRowContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'Content without media') RETURNING content_id", userID).Scan(&contentID); err != nil {
 		t.Fatal(err)
 	}
 	if contentID < 1 {
@@ -85,7 +85,13 @@ func TestContentMediaMetadataConstraintsAgainstPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !originalFilenameNull || !mimeTypeNull || !byteSizeNull || !storageKeyNull {
-		t.Fatal("expected existing content media metadata to be null")
+		t.Fatal("expected content without media to have null media metadata")
+	}
+
+	// The unique storage key must not stop a second content item from having no media.
+	_, err = db.ExecContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'Another item without media')", userID)
+	if err != nil {
+		t.Fatalf("expected content without media to coexist: %v", err)
 	}
 
 	_, err = db.ExecContext(ctx, "INSERT INTO content (creator_id, title, storage_key) VALUES ($1, 'Partial metadata', 'media/partial.mp4')", userID)
