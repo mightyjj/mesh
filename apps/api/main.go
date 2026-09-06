@@ -180,6 +180,7 @@ func newRouter(db *sql.DB) http.Handler {
 	router.Get("/me", requireClerkAuthorization(meHandler(db)).ServeHTTP)
 	router.Get("/content", requireClerkAuthorization(listContentHandler(db)).ServeHTTP)
 	router.Post("/content", requireClerkAuthorization(createContentHandler(db)).ServeHTTP)
+	router.Post("/content/{contentID}/media", requireClerkAuthorization(uploadContentMediaHandler(db)).ServeHTTP)
 	return router
 }
 
