@@ -21,7 +21,7 @@ func TestContentConstraintsAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -58,7 +58,7 @@ func TestContentMediaMetadataConstraintsAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -88,10 +88,9 @@ func TestContentMediaMetadataConstraintsAgainstPostgres(t *testing.T) {
 		t.Fatal("expected content without media to have null media metadata")
 	}
 
-	// The unique storage key must not stop a second content item from having no media.
 	_, err = db.ExecContext(ctx, "INSERT INTO content (creator_id, title) VALUES ($1, 'Another item without media')", userID)
 	if err != nil {
-		t.Fatalf("expected content without media to coexist: %v", err)
+		t.Fatalf("expected unique storage_key to allow a second row without media: %v", err)
 	}
 
 	_, err = db.ExecContext(ctx, "INSERT INTO content (creator_id, title, storage_key) VALUES ($1, 'Partial metadata', 'media/partial.mp4')", userID)
