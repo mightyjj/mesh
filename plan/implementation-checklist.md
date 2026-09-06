@@ -118,6 +118,16 @@ status and deterministic external ID in the browser.
 - Decision: rejected uploads return distinguishable messages naming the real
   size limit and the accepted types, so the web app can display them verbatim.
   The metadata update sets `updated_at`.
+- Decision: type detection uses `http.DetectContentType`, which recognises MP4
+  only when an `ftyp` brand contains `mp4`, and recognises WebM from four EBML
+  bytes shared by every Matroska file. So a valid MP4 branded only `isom iso2
+  avc1` is rejected with 415, and an audio-only `.mka` is accepted as WebM. A
+  real container parser is a later milestone, not this one.
+- Decision: `storage_key` is an opaque filename, not a secret. Any future
+  download route authorises on content ID and owner, never on the key.
+- Known gap: a process killed between writing the file and saving the metadata
+  leaves an unreferenced file in the media directory. There is no reaper yet;
+  the fix is a startup sweep of files absent from `content.storage_key`.
 - Verify: reject anonymous, oversized, unsupported, and foreign-user uploads;
   save one valid file and its metadata; retain it across an API container
   restart; remove a partially saved file when the database update fails.

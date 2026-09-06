@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 )
@@ -99,12 +100,30 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 		return performMediaUpload(t, router, contentID, ownerClerkID, body, filename, "application/octet-stream", false)
 	}
 
+	fileCount := func() int {
+		t.Helper()
+		entries, err := os.ReadDir(mediaDirectory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(entries)
+	}
+
 	if response := performMediaUpload(t, router, otherContentID, ownerClerkID, testMP4, "other.mp4", "video/mp4", false); response.Code != http.StatusNotFound {
 		t.Fatalf("expected foreign content status %d, got %d: %s", http.StatusNotFound, response.Code, response.Body.String())
 	}
 
-	if response := ownerRequest(ownedContentID, []byte("not a video"), "notes.txt"); response.Code != http.StatusUnsupportedMediaType || !strings.Contains(response.Body.String(), "video/mp4") {
-		t.Fatalf("expected unsupported media status %d and accepted types, got %d: %s", http.StatusUnsupportedMediaType, response.Code, response.Body.String())
+	if response := performMediaUpload(t, router, ownedContentID, ownerClerkID, []byte("not a video"), "notes.txt", "video/mp4", false); response.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected declared video/mp4 on non-video to be rejected with %d, got %d: %s", http.StatusUnsupportedMediaType, response.Code, response.Body.String())
+	} else {
+		for _, mediaType := range supportedMediaTypes {
+			if !strings.Contains(response.Body.String(), mediaType) {
+				t.Fatalf("expected rejection to name %q, got %s", mediaType, response.Body.String())
+			}
+		}
+	}
+	if got := fileCount(); got != 0 {
+		t.Fatalf("expected an unsupported type to be rejected before anything is written, got %d stored files", got)
 	}
 
 	if response := ownerRequest(ownedContentID, testMP4, "clip.mp4"); response.Code != http.StatusCreated {
@@ -139,14 +158,6 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 		}
 	}
 
-	fileCount := func() int {
-		t.Helper()
-		entries, err := os.ReadDir(mediaDirectory)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return len(entries)
-	}
 	if got := fileCount(); got != 1 {
 		t.Fatalf("expected one stored file after success, got %d", got)
 	}
@@ -187,13 +198,13 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 	}
 
 	triggerName := fmt.Sprintf("reject_media_%d", suffix)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), fmt.Sprintf("ALTER TABLE content DROP CONSTRAINT IF EXISTS %s", triggerName))
+	})
 	_, err = db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE content ADD CONSTRAINT %s CHECK (content_id <> %d OR storage_key IS NULL)", triggerName, failingContentID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), fmt.Sprintf("ALTER TABLE content DROP CONSTRAINT IF EXISTS %s", triggerName))
-	})
 	if response := ownerRequest(failingContentID, testMP4, "failed.mp4"); response.Code != http.StatusInternalServerError {
 		t.Fatalf("expected metadata failure status %d, got %d: %s", http.StatusInternalServerError, response.Code, response.Body.String())
 	}
@@ -206,6 +217,17 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 	}
 	if storageKey.Valid {
 		t.Fatalf("expected failed metadata update to leave storage key null, got %q", storageKey.String)
+	}
+
+	// Point MEDIA_DIR somewhere that cannot be created. Preparing storage would fail
+	// with 500, so a 415 proves the type is decided before anything touches the disk.
+	blocked := filepath.Join(t.TempDir(), "a-file-not-a-directory")
+	if err := os.WriteFile(blocked, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MEDIA_DIR", filepath.Join(blocked, "media"))
+	if response := performMediaUpload(t, router, failingContentID, ownerClerkID, []byte("not a video"), "notes.txt", "video/mp4", false); response.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected the type check to run before media storage is prepared, got %d: %s", response.Code, response.Body.String())
 	}
 }
 
@@ -343,5 +365,17 @@ func TestMediaUploadHelpers(t *testing.T) {
 	}
 	if got := originalFilename(`C:\\uploads\\clip.mp4`); got != "clip.mp4" {
 		t.Fatalf("expected basename filename, got %q", got)
+	}
+	if got := originalFilename("bad\xff\xfe.mp4"); !utf8.ValidString(got) {
+		t.Fatalf("expected valid UTF-8, which PostgreSQL requires, got %q", got)
+	}
+	if got := originalFilename("../../etc/passwd"); got != "passwd" {
+		t.Fatalf("expected traversal to reduce to a basename, got %q", got)
+	}
+	if got := originalFilename(".."); got != "upload" {
+		t.Fatalf("expected dot-dot to fall back to upload, got %q", got)
+	}
+	if got := originalFilename(strings.Repeat("a", 5000) + ".mp4"); len(got) > maxOriginalFilenameBytes {
+		t.Fatalf("expected filename capped at %d bytes, got %d", maxOriginalFilenameBytes, len(got))
 	}
 }

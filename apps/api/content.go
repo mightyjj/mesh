@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -36,11 +37,12 @@ type createContentRequest struct {
 const contentColumns = "content_id, creator_id, title, created_at, updated_at"
 
 const (
-	maxMediaBytes         int64 = 100 << 20
-	maxMultipartOverhead  int64 = 1 << 20
-	mediaProbeBytes             = 512
-	defaultMediaDirectory       = "./media"
-	mediaFieldName              = "file"
+	maxMediaBytes            int64 = 100 << 20
+	maxMultipartOverhead     int64 = 1 << 20
+	mediaProbeBytes                = 512
+	defaultMediaDirectory          = "./media"
+	mediaFieldName                 = "file"
+	maxOriginalFilenameBytes       = 255
 )
 
 var (
@@ -73,13 +75,12 @@ func mediaDirectory() string {
 func originalFilename(filename string) string {
 	filename = strings.ReplaceAll(filename, "\\", "/")
 	filename = path.Base(filename)
-	filename = strings.Map(func(r rune) rune {
-		if r == 0 {
-			return -1
-		}
-		return r
-	}, filename)
-	if filename == "" || filename == "." || filename == "/" {
+	// PostgreSQL rejects invalid UTF-8, so repairing it here is load-bearing, not tidying.
+	filename = strings.ToValidUTF8(strings.ReplaceAll(filename, "\x00", ""), "\uFFFD")
+	if len(filename) > maxOriginalFilenameBytes {
+		filename = strings.ToValidUTF8(filename[:maxOriginalFilenameBytes], "")
+	}
+	if filename == "" || filename == "." || filename == ".." || filename == "/" {
 		return "upload"
 	}
 	return filename
@@ -151,38 +152,6 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		directory := mediaDirectory()
-		if err := os.MkdirAll(directory, 0750); err != nil {
-			writeError(w, http.StatusInternalServerError, "could not prepare media storage")
-			return
-		}
-		file, err := os.CreateTemp(directory, "media-")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "could not prepare media storage")
-			return
-		}
-		storageKey := filepath.Base(file.Name())
-		filePath := filepath.Join(directory, storageKey)
-		keepFile := false
-		fileClosed := false
-		closeFile := func() error {
-			if fileClosed {
-				return nil
-			}
-			fileClosed = true
-			return file.Close()
-		}
-		defer func() {
-			if err := closeFile(); err != nil {
-				log.Printf("close media file %q: %v", filePath, err)
-			}
-			if !keepFile {
-				if err := os.Remove(filePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-					log.Printf("remove media file %q: %v", filePath, err)
-				}
-			}
-		}()
-
 		probe := make([]byte, mediaProbeBytes)
 		probeLength, probeErr := io.ReadFull(part, probe)
 		if probeErr != nil && !errors.Is(probeErr, io.EOF) && !errors.Is(probeErr, io.ErrUnexpectedEOF) {
@@ -194,6 +163,37 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		probe = probe[:probeLength]
+
+		detectedMIMEType := http.DetectContentType(probe)
+		if !slices.Contains(supportedMediaTypes, detectedMIMEType) {
+			// Drain first: an undrained body reaches the client as a reset, not as this 415.
+			_, _ = io.Copy(io.Discard, part)
+			writeError(w, http.StatusUnsupportedMediaType, unsupportedTypeMessage)
+			return
+		}
+
+		directory := mediaDirectory()
+		if err := os.MkdirAll(directory, 0750); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not prepare media storage")
+			return
+		}
+		file, err := os.CreateTemp(directory, "media-")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not prepare media storage")
+			return
+		}
+		filePath := file.Name()
+		storageKey := filepath.Base(filePath)
+		keepFile := false
+		defer func() {
+			_ = file.Close()
+			if !keepFile {
+				if err := os.Remove(filePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+					log.Printf("remove media file %q: %v", filePath, err)
+				}
+			}
+		}()
+
 		written, err := file.Write(probe)
 		if err != nil || written != len(probe) {
 			writeError(w, http.StatusInternalServerError, "could not store media")
@@ -229,19 +229,16 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		detectedMIMEType := http.DetectContentType(probe)
-		if !slices.Contains(supportedMediaTypes, detectedMIMEType) {
-			writeError(w, http.StatusUnsupportedMediaType, unsupportedTypeMessage)
-			return
-		}
-		if err := closeFile(); err != nil {
+		if err := file.Close(); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not store media")
 			return
 		}
 
 		var response mediaUploadResponse
+		// A client disconnect must not cancel this: Postgres can commit the row while
+		// Scan reports the cancellation, and the deferred cleanup then deletes the file.
 		err = db.QueryRowContext(
-			r.Context(),
+			context.WithoutCancel(r.Context()),
 			`UPDATE content
 			 SET original_filename = $1, mime_type = $2, byte_size = $3, storage_key = $4, updated_at = CURRENT_TIMESTAMP
 			 WHERE content_id = $5
