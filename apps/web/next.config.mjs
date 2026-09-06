@@ -2,6 +2,9 @@
 const gatewayURL = process.env.GATEWAY_URL ?? "http://localhost:8081";
 
 const nextConfig = {
+	experimental: {
+		proxyClientMaxBodySize: "110mb",
+	},
 	async rewrites() {
 		return [
 			{
@@ -15,6 +18,10 @@ const nextConfig = {
 			{
 				source: "/api/content",
 				destination: `${gatewayURL}/api/content`,
+			},
+			{
+				source: "/api/content/:path*",
+				destination: `${gatewayURL}/api/content/:path*`,
 			},
 		];
 	},
