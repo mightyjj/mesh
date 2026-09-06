@@ -30,6 +30,7 @@ func gatewayHandler(apiURL string) http.Handler {
 	router.Get("/api/me", apiProxy.ServeHTTP)
 	router.Get("/api/content", apiProxy.ServeHTTP)
 	router.Post("/api/content", apiProxy.ServeHTTP)
+	router.Post("/api/content/{contentID}/media", apiProxy.ServeHTTP)
 	return router
 }
 
