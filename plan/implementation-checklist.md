@@ -108,7 +108,7 @@ status and deterministic external ID in the browser.
 
 ### M1.4: Upload one local media file
 
-- [ ] Add authenticated `POST /content/{id}/media` for one owned content item.
+- [x] Add authenticated `POST /content/{id}/media` for one owned content item.
 - Scope: streaming multipart input to a configurable local directory, a fixed
   size limit, an explicit allowlist of supported MIME types, collision-safe
   storage keys, persisted metadata, gateway and web routing for content
