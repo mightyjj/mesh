@@ -170,7 +170,8 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 
 		detectedMIMEType := http.DetectContentType(probe)
 		if !slices.Contains(supportedMediaTypes, detectedMIMEType) {
-			// Drain first: an undrained body reaches the client as a reset, not as this 415.
+			// Drain first so the client reliably reads this 415 instead of a possible reset.
+			// MaxBytesReader caps what this can read.
 			_, _ = io.Copy(io.Discard, part)
 			writeError(w, http.StatusUnsupportedMediaType, unsupportedTypeMessage)
 			return
@@ -233,6 +234,11 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		// Flush before the metadata commits, or a power loss can leave a row for a short file.
+		if err := file.Sync(); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not store media")
+			return
+		}
 		if err := file.Close(); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not store media")
 			return

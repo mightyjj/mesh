@@ -205,7 +205,7 @@ func TestContentMediaUploadAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response := ownerRequest(failingContentID, testMP4, "failed.mp4"); response.Code != http.StatusInternalServerError {
+	if response := ownerRequest(failingContentID, testMP4, "failed.mp4"); response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "could not save media metadata") {
 		t.Fatalf("expected metadata failure status %d, got %d: %s", http.StatusInternalServerError, response.Code, response.Body.String())
 	}
 	if got := fileCount(); got != 4 {

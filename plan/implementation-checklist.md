@@ -128,6 +128,13 @@ status and deterministic external ID in the browser.
 - Known gap: a process killed between writing the file and saving the metadata
   leaves an unreferenced file in the media directory. There is no reaper yet;
   the fix is a startup sweep of files absent from `content.storage_key`.
+- Known gap: the reverse is also possible. If the database connection drops
+  after the metadata commits but before the reply arrives, the handler deletes
+  the file and the row points at nothing. With no replacement route that item
+  stays at 409. Rare; revisit with media replacement.
+- Known gap: Next.js buffers each upload passing through its proxy in memory,
+  up to the 110mb limit, with no cap on concurrent uploads. Size the web
+  container with this in mind.
 - Verify: reject anonymous, oversized, unsupported, and foreign-user uploads;
   save one valid file and its metadata; retain it across an API container
   restart; remove a partially saved file when the database update fails.
