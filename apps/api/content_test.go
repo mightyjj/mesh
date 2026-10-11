@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestContentCreateAndListAgainstPostgres(t *testing.T) {
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&items); err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != len(created) || items[0] != created[0] || items[1] != created[1] {
+	if len(items) != len(created) || !reflect.DeepEqual(items, created) {
 		t.Fatalf("expected current user's content in stable order %+v, got %+v", created, items)
 	}
 	if strings.Contains(body, "creator_id") {
@@ -141,6 +142,9 @@ func TestContentCreateAndListAgainstPostgres(t *testing.T) {
 
 	var createdFields map[string]any
 	recorder = request(http.MethodPost, "/content", `{"title":"Fields check"}`, clerkUserID)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected create status %d, got %d: %s", http.StatusCreated, recorder.Code, recorder.Body.String())
+	}
 	if err := json.NewDecoder(recorder.Body).Decode(&createdFields); err != nil {
 		t.Fatal(err)
 	}
@@ -154,6 +158,9 @@ func TestContentCreateAndListAgainstPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder = request(http.MethodGet, "/content", "", clerkUserID)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected list status %d, got %d: %s", http.StatusOK, recorder.Code, recorder.Body.String())
+	}
 	items = nil
 	if err := json.NewDecoder(recorder.Body).Decode(&items); err != nil {
 		t.Fatal(err)
