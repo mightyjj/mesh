@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -177,6 +179,73 @@ func TestGatewayProxiesContentMethodsAndRequest(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected only GET and POST to reach API, got %d calls", calls)
+	}
+}
+
+func TestGatewayProxiesMediaUpload(t *testing.T) {
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+	part, err := writer.CreateFormFile("file", "clip.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("fake video bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected method %s, got %s", http.MethodPost, r.Method)
+		}
+		if r.URL.Path != "/content/42/media" {
+			t.Errorf("expected path /content/42/media, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer upload-token" {
+			t.Errorf("expected authorization header to pass through, got %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != writer.FormDataContentType() {
+			t.Errorf("expected multipart content type to pass through, got %q", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+			return
+		}
+		if !bytes.Equal(body, requestBody.Bytes()) {
+			t.Errorf("expected multipart body to pass through unchanged")
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"content_id":42}`))
+	}))
+	defer api.Close()
+
+	gateway := httptest.NewServer(gatewayHandler(api.URL))
+	defer gateway.Close()
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/content/42/media", bytes.NewReader(requestBody.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer upload-token")
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, response.StatusCode)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `{"content_id":42}` {
+		t.Fatalf("expected API response, got %q", body)
 	}
 }
 

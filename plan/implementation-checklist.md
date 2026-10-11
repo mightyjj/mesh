@@ -108,7 +108,7 @@ status and deterministic external ID in the browser.
 
 ### M1.4: Upload one local media file
 
-- [ ] Add authenticated `POST /content/{id}/media` for one owned content item.
+- [x] Add authenticated `POST /content/{id}/media` for one owned content item.
 - Scope: streaming multipart input to a configurable local directory, a fixed
   size limit, an explicit allowlist of supported MIME types, collision-safe
   storage keys, persisted metadata, gateway and web routing for content
@@ -118,6 +118,23 @@ status and deterministic external ID in the browser.
 - Decision: rejected uploads return distinguishable messages naming the real
   size limit and the accepted types, so the web app can display them verbatim.
   The metadata update sets `updated_at`.
+- Decision: type detection uses `http.DetectContentType`, which recognises MP4
+  only when an `ftyp` brand contains `mp4`, and recognises WebM from four EBML
+  bytes shared by every Matroska file. So a valid MP4 branded only `isom iso2
+  avc1` is rejected with 415, and an audio-only `.mka` is accepted as WebM. A
+  real container parser is a later milestone, not this one.
+- Decision: `storage_key` is an opaque filename, not a secret. Any future
+  download route authorises on content ID and owner, never on the key.
+- Known gap: a process killed between writing the file and saving the metadata
+  leaves an unreferenced file in the media directory. There is no reaper yet;
+  the fix is a startup sweep of files absent from `content.storage_key`.
+- Known gap: the reverse is also possible. If the database connection drops
+  after the metadata commits but before the reply arrives, the handler deletes
+  the file and the row points at nothing. With no replacement route that item
+  stays at 409. Rare; revisit with media replacement.
+- Known gap: Next.js buffers each upload passing through its proxy in memory,
+  up to the 110mb limit, with no cap on concurrent uploads. Size the web
+  container with this in mind.
 - Verify: reject anonymous, oversized, unsupported, and foreign-user uploads;
   save one valid file and its metadata; retain it across an API container
   restart; remove a partially saved file when the database update fails.

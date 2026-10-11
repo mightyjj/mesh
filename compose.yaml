@@ -26,6 +26,9 @@ services:
     environment:
       DATABASE_URL: postgres://mesh:mesh@db:5432/mesh?sslmode=disable
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      MEDIA_DIR: /media
+    volumes:
+      - media_data:/media
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -52,3 +55,4 @@ services:
 
 volumes:
   postgres_data:
+  media_data:
