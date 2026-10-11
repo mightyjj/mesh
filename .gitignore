@@ -7,7 +7,7 @@ node_modules/
 .next/
 dist/
 coverage/
-media/
+/apps/api/media/
 
 bin/
 *.test
