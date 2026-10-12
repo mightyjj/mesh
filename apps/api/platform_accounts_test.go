@@ -93,10 +93,33 @@ func TestPlatformAccountPersistenceAgainstPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+	_, err = db.ExecContext(ctx, "INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name) VALUES ($1, 'fake', $2, $3)", userID, expectedAccounts[0].externalID, "Duplicate Account")
+	assertPostgresCode(t, err, "23505")
+
+	var secondUserID int64
+	if err := db.QueryRowContext(ctx, "INSERT INTO users (email, display_name) VALUES ($1, 'Second Platform Account Test') RETURNING id", fmt.Sprintf("platform-account-second-%d@example.com", suffix)).Scan(&secondUserID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), "DELETE FROM users WHERE id = $1", secondUserID)
+	})
+	_, err = db.ExecContext(ctx, "INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name) VALUES ($1, 'fake', $2, $3)", secondUserID, expectedAccounts[0].externalID, "Duplicate Account")
+	assertPostgresCode(t, err, "23505")
+
+	if _, err := db.ExecContext(ctx, "INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name) VALUES ($1, 'fake', $2, $3)", userID, fmt.Sprintf("account-%d-same-display", suffix), expectedAccounts[0].displayName); err != nil {
 		t.Fatal(err)
 	}
 	var accountCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM platform_accounts WHERE user_id = $1", userID).Scan(&accountCount); err != nil {
+		t.Fatal(err)
+	}
+	if accountCount != len(expectedAccounts)+1 {
+		t.Fatalf("expected %d persisted platform accounts for the test user, found %d", len(expectedAccounts)+1, accountCount)
+	}
+
+	if _, err := db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM platform_accounts WHERE user_id = $1", userID).Scan(&accountCount); err != nil {
 		t.Fatal(err)
 	}
