@@ -73,3 +73,42 @@ func createPlatformAccountHandler(db *sql.DB) http.HandlerFunc {
 		writeJSON(w, http.StatusCreated, created)
 	}
 }
+
+func listPlatformAccountsHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, no-store")
+
+		claims, ok := clerk.SessionClaimsFromContext(r.Context())
+		if !ok || claims == nil || claims.Subject == "" {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		rows, err := db.QueryContext(
+			r.Context(),
+			"SELECT "+platformAccountColumns+" FROM platform_accounts WHERE user_id = (SELECT id FROM users WHERE clerk_user_id = $1) ORDER BY platform_account_id ASC",
+			claims.Subject,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not list platform accounts")
+			return
+		}
+		defer rows.Close()
+
+		accounts := []platformAccount{}
+		for rows.Next() {
+			var account platformAccount
+			if err := scanPlatformAccount(rows, &account); err != nil {
+				writeError(w, http.StatusInternalServerError, "could not list platform accounts")
+				return
+			}
+			accounts = append(accounts, account)
+		}
+		if err := rows.Err(); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not list platform accounts")
+			return
+		}
+
+		writeJSON(w, http.StatusOK, accounts)
+	}
+}
