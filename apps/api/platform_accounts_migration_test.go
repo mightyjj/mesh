@@ -77,80 +77,42 @@ func TestPlatformAccountsMigrationPreservesExistingData(t *testing.T) {
 		applyUp(filename)
 	}
 
-	var beforeUser migrationCompatibilityUser
+	var userID int64
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO users (email, clerk_user_id, display_name)
 		VALUES ('migration-compat@example.com', 'user_migration_compat', 'Migration Compatibility')
-		RETURNING id, email, clerk_user_id, display_name, created_at, updated_at
-	`).Scan(
-		&beforeUser.ID,
-		&beforeUser.Email,
-		&beforeUser.ClerkUserID,
-		&beforeUser.DisplayName,
-		&beforeUser.CreatedAt,
-		&beforeUser.UpdatedAt,
-	); err != nil {
+		RETURNING id
+	`).Scan(&userID); err != nil {
 		t.Fatal(err)
 	}
 
-	var beforeContent migrationCompatibilityContent
-	if err := tx.QueryRowContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO content (creator_id, title, original_filename, mime_type, byte_size, storage_key)
 		VALUES ($1, 'Migration compatibility video', 'migration.mp4', 'video/mp4', 12345, 'media/migration-compat.mp4')
-		RETURNING content_id, creator_id, title, original_filename, mime_type, byte_size, storage_key, created_at, updated_at
-	`, beforeUser.ID).Scan(
-		&beforeContent.ID,
-		&beforeContent.CreatorID,
-		&beforeContent.Title,
-		&beforeContent.OriginalFilename,
-		&beforeContent.MIMEType,
-		&beforeContent.ByteSize,
-		&beforeContent.StorageKey,
-		&beforeContent.CreatedAt,
-		&beforeContent.UpdatedAt,
-	); err != nil {
+	`, userID); err != nil {
 		t.Fatal(err)
 	}
 
+	snapshot := func() (string, string) {
+		t.Helper()
+
+		var userRow, contentRow string
+		if err := tx.QueryRowContext(ctx, `
+			SELECT row_to_json(u)::text, row_to_json(c)::text
+			FROM users u JOIN content c ON c.creator_id = u.id
+			WHERE u.id = $1
+		`, userID).Scan(&userRow, &contentRow); err != nil {
+			t.Fatal(err)
+		}
+		return userRow, contentRow
+	}
+
+	beforeUser, beforeContent := snapshot()
 	applyUp("20261012000000_create_platform_accounts.sql")
 
-	var afterUser migrationCompatibilityUser
-	if err := tx.QueryRowContext(ctx, `
-		SELECT id, email, clerk_user_id, display_name, created_at, updated_at
-		FROM users WHERE id = $1
-	`, beforeUser.ID).Scan(
-		&afterUser.ID,
-		&afterUser.Email,
-		&afterUser.ClerkUserID,
-		&afterUser.DisplayName,
-		&afterUser.CreatedAt,
-		&afterUser.UpdatedAt,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if beforeUser != afterUser {
-		t.Fatalf("user changed during migration: before=%+v after=%+v", beforeUser, afterUser)
-	}
-
-	var afterContent migrationCompatibilityContent
-	if err := tx.QueryRowContext(ctx, `
-		SELECT content_id, creator_id, title, original_filename, mime_type, byte_size, storage_key, created_at, updated_at
-		FROM content WHERE content_id = $1
-	`, beforeContent.ID).Scan(
-		&afterContent.ID,
-		&afterContent.CreatorID,
-		&afterContent.Title,
-		&afterContent.OriginalFilename,
-		&afterContent.MIMEType,
-		&afterContent.ByteSize,
-		&afterContent.StorageKey,
-		&afterContent.CreatedAt,
-		&afterContent.UpdatedAt,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if beforeContent != afterContent {
-		t.Fatalf("content changed during migration: before=%+v after=%+v", beforeContent, afterContent)
+	afterUser, afterContent := snapshot()
+	if beforeUser != afterUser || beforeContent != afterContent {
+		t.Fatalf("existing rows changed during migration: user before=%s after=%s, content before=%s after=%s", beforeUser, afterUser, beforeContent, afterContent)
 	}
 
 	var accountCount int
@@ -160,25 +122,4 @@ func TestPlatformAccountsMigrationPreservesExistingData(t *testing.T) {
 	if accountCount != 0 {
 		t.Fatalf("expected new platform accounts table to be empty, got %d rows", accountCount)
 	}
-}
-
-type migrationCompatibilityUser struct {
-	ID          int64
-	Email       string
-	ClerkUserID string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type migrationCompatibilityContent struct {
-	ID               int64
-	CreatorID        int64
-	Title            string
-	OriginalFilename string
-	MIMEType         string
-	ByteSize         int64
-	StorageKey       string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
 }
