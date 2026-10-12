@@ -148,13 +148,37 @@ item whose upload failed is understandable rather than confusing.
 ### M1.5: Persist platform accounts
 
 - [ ] Add a Goose migration for `platform_accounts` owned by a user.
-- Scope: platform, external account ID, display name, timestamps, and a unique
-  external identity per platform.
-- Out of scope: OAuth credentials, tokens, and HTTP routes.
+- Purpose: give Mesh one owned destination record before account routes and
+  publishing exist. The external account ID is the platform identity; the
+  display name is only a readable label and is not an identity.
+- Schema rules:
+  - `platform_account_id BIGSERIAL PRIMARY KEY`, matching `content_id`.
+  - `user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE`, with an
+    index for owner listing.
+  - `platform TEXT NOT NULL CHECK (platform = 'fake')`.
+  - `external_account_id TEXT NOT NULL CHECK (BTRIM(external_account_id) <> '')`.
+  - `display_name TEXT NOT NULL CHECK (BTRIM(display_name) <> '')`.
+  - `created_at` and `updated_at`: `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`.
+  - `UNIQUE (platform, external_account_id)` makes each destination belong to
+    one Mesh user. Shared ownership is not supported yet.
+- Scope: the schema contract and its database verification.
+- Out of scope: OAuth credentials, tokens, HTTP routes, UI, real providers,
+  and an automatic `updated_at` trigger.
 - Decision: store `platform` as text with a check constraint, so supporting one
   more platform is a migration rather than a type change.
-- Verify: migrate up and down, reject duplicate external identities, and
-  enforce user ownership.
+- Down migration deletes platform account data only; existing users and content
+  remain.
+- PR stack:
+  1. Document these platform account rules.
+  2. Add the schema and a minimal valid account smoke test.
+  3. Verify migration compatibility with existing users and content.
+  4. Verify valid account persistence and multiple destinations per user.
+  5. Verify the user foreign key and delete cascade.
+  6. Verify global platform and external identity uniqueness.
+  7. Verify supported platforms and required nonblank values.
+  8. Verify rollback and reapplication.
+- Each PR runs the relevant checks, and M1.5 stays unchecked until all eight
+  PRs are complete.
 
 ### M1.6: Create and list fake platform accounts
 
