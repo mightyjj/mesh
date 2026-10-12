@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestPlatformAccountsMigrationPreservesExistingData(t *testing.T) {
+func TestPlatformAccountsMigrationLifecycle(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("DATABASE_URL is not configured")
@@ -68,6 +68,29 @@ func TestPlatformAccountsMigrationPreservesExistingData(t *testing.T) {
 		}
 	}
 
+	applyDown := func(filename string) {
+		t.Helper()
+
+		contents, err := os.ReadFile(filepath.Join("migrations", filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		const downMarker = "-- +goose Down"
+		downStart := strings.Index(string(contents), downMarker)
+		if downStart < 0 {
+			t.Fatalf("migration %s is missing a goose down marker", filename)
+		}
+
+		downSQL := strings.TrimSpace(string(contents[downStart+len(downMarker):]))
+		if downSQL == "" {
+			t.Fatalf("migration %s has an empty down section", filename)
+		}
+		if _, err := tx.ExecContext(ctx, downSQL); err != nil {
+			t.Fatalf("reverse migration %s: %v", filename, err)
+		}
+	}
+
 	for _, filename := range []string{
 		"20260830000000_create_users.sql",
 		"20260831000000_add_clerk_user_id.sql",
@@ -121,5 +144,48 @@ func TestPlatformAccountsMigrationPreservesExistingData(t *testing.T) {
 	}
 	if accountCount != 0 {
 		t.Fatalf("expected new platform accounts table to be empty, got %d rows", accountCount)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name)
+		VALUES ($1, 'fake', 'migration-account', 'Migration Account')
+	`, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	applyDown("20261012000000_create_platform_accounts.sql")
+
+	var tableName sql.NullString
+	if err := tx.QueryRowContext(ctx, "SELECT to_regclass($1::text)", schemaName+".platform_accounts").Scan(&tableName); err != nil {
+		t.Fatal(err)
+	}
+	if tableName.Valid {
+		t.Fatalf("expected platform accounts table to be removed, got %q", tableName.String)
+	}
+
+	afterDownUser, afterDownContent := snapshot()
+	if beforeUser != afterDownUser || beforeContent != afterDownContent {
+		t.Fatalf("existing rows changed during migration reversal: user before=%s after=%s, content before=%s after=%s", beforeUser, afterDownUser, beforeContent, afterDownContent)
+	}
+
+	applyUp("20261012000000_create_platform_accounts.sql")
+
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM platform_accounts").Scan(&accountCount); err != nil {
+		t.Fatal(err)
+	}
+	if accountCount != 0 {
+		t.Fatalf("expected reapplied platform accounts table to be empty, got %d rows", accountCount)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name)
+		VALUES ($1, 'fake', 'migration-account-reapplied', 'Reapplied Migration Account')
+	`, userID); err != nil {
+		t.Fatal(err)
+	}
+
+	afterReapplyUser, afterReapplyContent := snapshot()
+	if beforeUser != afterReapplyUser || beforeContent != afterReapplyContent {
+		t.Fatalf("existing rows changed after migration reapplication: user before=%s after=%s, content before=%s after=%s", beforeUser, afterReapplyUser, beforeContent, afterReapplyContent)
 	}
 }
