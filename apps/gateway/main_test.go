@@ -182,6 +182,59 @@ func TestGatewayProxiesContentMethodsAndRequest(t *testing.T) {
 	}
 }
 
+func TestGatewayProxiesPlatformAccountCreate(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected method %s, got %s", http.MethodPost, r.Method)
+		}
+		if r.URL.Path != "/platform-accounts" {
+			t.Errorf("expected path /platform-accounts, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer account-token" {
+			t.Errorf("expected authorization header to pass through, got %q", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+		}
+		if len(body) != 0 {
+			t.Errorf("expected empty request body, got %q", body)
+		}
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"platform_account_id":42,"platform":"fake"}`))
+	}))
+	defer api.Close()
+
+	gateway := httptest.NewServer(gatewayHandler(api.URL))
+	defer gateway.Close()
+
+	request, err := http.NewRequest(http.MethodPost, gateway.URL+"/api/platform-accounts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer account-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, response.StatusCode)
+	}
+	if got := response.Header.Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("expected cache control header to pass through, got %q", got)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `{"platform_account_id":42,"platform":"fake"}` {
+		t.Fatalf("expected API response, got %q", body)
+	}
+}
+
 func TestGatewayProxiesMediaUpload(t *testing.T) {
 	var requestBody bytes.Buffer
 	writer := multipart.NewWriter(&requestBody)

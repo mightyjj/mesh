@@ -195,7 +195,7 @@ item whose upload failed is understandable rather than confusing.
      label rules, repeat creation behavior, and error statuses. Ownership comes
      from the authenticated internal user. Creation remains one action with no
      account details form. No runtime behavior changes in this PR.
-  2. **Create an owned fake platform account.** Implement the authenticated
+  2. **[x] Create an owned fake platform account.** Implement the authenticated
      create route using the existing schema and user lookup pattern. Include
      gateway routing and the web rewrite so the route is reachable through the
      local system. Verify persistence, anonymous rejection, duplicate rejection,
