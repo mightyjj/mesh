@@ -215,7 +215,8 @@ PR 1 defines the contract that the route PRs implement:
 
 - Routes are `POST /platform-accounts` and `GET /platform-accounts` in the
   API, exposed as `POST /api/platform-accounts` and `GET /api/platform-accounts`
-  through the gateway and web rewrite.
+  through the gateway and web rewrite. Both handlers set
+  `Cache-Control: private, no-store` on their responses.
 - `POST /platform-accounts` takes no request body and accepts no caller supplied
   fields. The caller cannot choose the owner, platform, external identity, or
   label. A nonempty body is a `400` response with
