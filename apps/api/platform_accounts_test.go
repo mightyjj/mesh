@@ -117,6 +117,41 @@ func TestPlatformAccountPersistenceAgainstPostgres(t *testing.T) {
 		t.Fatalf("expected %d persisted platform accounts for the test user, found %d", len(expectedAccounts)+1, accountCount)
 	}
 
+	validTimestamp := time.Now().UTC()
+	invalidAccounts := []struct {
+		name  string
+		field int
+		value any
+		code  string
+	}{
+		{"unknown platform", 1, "youtube", "23514"},
+		{"blank platform", 1, "", "23514"},
+		{"null user_id", 0, nil, "23502"},
+		{"null platform", 1, nil, "23502"},
+		{"null external_account_id", 2, nil, "23502"},
+		{"null display_name", 3, nil, "23502"},
+		{"empty external_account_id", 2, "", "23514"},
+		{"space-only external_account_id", 2, " ", "23514"},
+		{"tab-only external_account_id", 2, "\t", "23514"},
+		{"newline-only external_account_id", 2, "\n", "23514"},
+		{"empty display_name", 3, "", "23514"},
+		{"space-only display_name", 3, " ", "23514"},
+		{"tab-only display_name", 3, "\t", "23514"},
+		{"newline-only display_name", 3, "\n", "23514"},
+		{"null created_at", 4, nil, "23502"},
+		{"null updated_at", 5, nil, "23502"},
+	}
+	for i, invalid := range invalidAccounts {
+		args := []any{userID, "fake", fmt.Sprintf("account-%d-invalid-%d", suffix, i), "Valid Account", validTimestamp, validTimestamp}
+		args[invalid.field] = invalid.value
+		_, err = db.ExecContext(ctx, "INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)", args...)
+		if err == nil {
+			t.Errorf("%s: expected insert to fail", invalid.name)
+			continue
+		}
+		assertPostgresCode(t, err, invalid.code)
+	}
+
 	if _, err := db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
 		t.Fatal(err)
 	}
