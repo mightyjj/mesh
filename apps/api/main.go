@@ -181,6 +181,7 @@ func newRouter(db *sql.DB) http.Handler {
 	router.Get("/content", requireClerkAuthorization(listContentHandler(db)).ServeHTTP)
 	router.Post("/content", requireClerkAuthorization(createContentHandler(db)).ServeHTTP)
 	router.Post("/content/{contentID}/media", requireClerkAuthorization(uploadContentMediaHandler(db)).ServeHTTP)
+	router.Post("/platform-accounts", requireClerkAuthorization(createPlatformAccountHandler(db)).ServeHTTP)
 	return router
 }
 

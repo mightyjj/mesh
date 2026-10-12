@@ -23,6 +23,10 @@ const nextConfig = {
 				source: "/api/content/:path*",
 				destination: `${gatewayURL}/api/content/:path*`,
 			},
+			{
+				source: "/api/platform-accounts",
+				destination: `${gatewayURL}/api/platform-accounts`,
+			},
 		];
 	},
 };
