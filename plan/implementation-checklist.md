@@ -147,7 +147,7 @@ item whose upload failed is understandable rather than confusing.
 
 ### M1.5: Persist platform accounts
 
-- [ ] Add a Goose migration for `platform_accounts` owned by a user.
+- [x] Add a Goose migration for `platform_accounts` owned by a user.
 - Purpose: give Mesh one owned destination record before account routes and
   publishing exist. The external account ID is the platform identity; the
   display name is only a readable label and is not an identity.
