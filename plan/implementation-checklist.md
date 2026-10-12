@@ -189,6 +189,71 @@ item whose upload failed is understandable rather than confusing.
   real provider is a redirect and never a data-entry form.
 - Verify: anonymous access is rejected, duplicate accounts are rejected, and
   users cannot list each other's accounts.
+- PR stack:
+  1. **[x] Define the fake account API contract.** Document the create and
+     list paths, request and response JSON, deterministic fake identity and
+     label rules, repeat creation behavior, and error statuses. Ownership comes
+     from the authenticated internal user. Creation remains one action with no
+     account details form. No runtime behavior changes in this PR.
+  2. **Create an owned fake platform account.** Implement the authenticated
+     create route using the existing schema and user lookup pattern. Include
+     gateway routing and the web rewrite so the route is reachable through the
+     local system. Verify persistence, anonymous rejection, duplicate rejection,
+     and that a caller cannot choose another owner or a real provider.
+  3. **List the current creator's fake accounts.** Implement the authenticated
+     list route, including gateway routing and the web rewrite. Return stable
+     account JSON and an empty array when the creator has no accounts. Verify
+     anonymous rejection, persistence across requests, isolation between users,
+     and proxying through the gateway.
+- Each route PR includes its API and gateway tests. Run the existing database
+  tests and web build for the affected paths. M1.6 stays unchecked until all
+  three PRs are complete; the account creation and selection UI stays in M1.10.
+
+#### M1.6 API contract
+
+PR 1 defines the contract that the route PRs implement:
+
+- Routes are `POST /platform-accounts` and `GET /platform-accounts` in the
+  API, exposed as `POST /api/platform-accounts` and `GET /api/platform-accounts`
+  through the gateway and web rewrite. Both handlers set
+  `Cache-Control: private, no-store` on their responses.
+- `POST /platform-accounts` takes no request body and accepts no caller supplied
+  fields. The caller cannot choose the owner, platform, external identity, or
+  label. A nonempty body is a `400` response with
+  `{"error":"request body must be empty"}`.
+- Creation resolves the Clerk subject to `users.id` through
+  `users.clerk_user_id`, as content creation does. The generated row always has
+  `platform: "fake"`, `external_account_id: "fake-user-{users.id}"`, and
+  `display_name: "Fake Account {users.id}"`, where `{users.id}` is the decimal
+  internal user ID. This gives each internal user one stable fake destination.
+- A successful create returns `201` and this JSON shape, without `user_id`:
+
+  ```json
+  {
+    "platform_account_id": 42,
+    "platform": "fake",
+    "external_account_id": "fake-user-7",
+    "display_name": "Fake Account 7",
+    "created_at": "2026-10-12T10:00:00Z",
+    "updated_at": "2026-10-12T10:00:00Z"
+  }
+  ```
+
+- Repeating the create request for the same internal user returns `409` with
+  `{"error":"fake platform account already exists"}` and creates no row. A
+  database uniqueness conflict for the deterministic identity maps to the same
+  response.
+- If the authenticated Clerk subject has no internal user row, create returns
+  `409` with `{"error":"current user is not initialized"}`. The route does
+  not create or update users.
+- `GET /platform-accounts` returns `200` with a JSON array of the same account
+  objects, limited to the authenticated internal user and ordered by
+  `platform_account_id ASC`. No accounts, including an unmapped authenticated
+  subject, returns `[]` rather than `null`.
+- Missing or rejected authentication returns `401` using the existing
+  authentication error format. Database failures return `500` with an
+  `{"error":...}` object. Update, delete, account lookup by ID, OAuth, real
+  providers, pagination, and request fields are outside this contract.
 
 ### M1.7: Persist platform-specific posts
 
