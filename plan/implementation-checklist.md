@@ -182,7 +182,7 @@ item whose upload failed is understandable rather than confusing.
 
 ### M1.6: Create and list fake platform accounts
 
-- [ ] Add authenticated create and list routes for `fake` platform accounts.
+- [x] Add authenticated create and list routes for `fake` platform accounts.
 - Scope: current-user ownership and deterministic local account data.
 - Out of scope: real providers, OAuth, update, and delete.
 - Decision: creating a test account stays a single action, because connecting a
@@ -200,14 +200,14 @@ item whose upload failed is understandable rather than confusing.
      gateway routing and the web rewrite so the route is reachable through the
      local system. Verify persistence, anonymous rejection, duplicate rejection,
      and that a caller cannot choose another owner or a real provider.
-  3. **List the current creator's fake accounts.** Implement the authenticated
+  3. **[x] List the current creator's fake accounts.** Implement the authenticated
      list route, including gateway routing and the web rewrite. Return stable
      account JSON and an empty array when the creator has no accounts. Verify
      anonymous rejection, persistence across requests, isolation between users,
      and proxying through the gateway.
 - Each route PR includes its API and gateway tests. Run the existing database
-  tests and web build for the affected paths. M1.6 stays unchecked until all
-  three PRs are complete; the account creation and selection UI stays in M1.10.
+  tests and web build for the affected paths. The account creation and
+  selection UI stays in M1.10.
 
 #### M1.6 API contract
 

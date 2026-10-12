@@ -22,9 +22,9 @@ Development happens in small, runnable steps tracked in [plan/implementation-che
 
 Milestone 0 (runnable authenticated foundation) is complete. Docker Compose runs PostgreSQL, migrations, the API, the gateway, and the web app. Clerk sign in maps to an internal user via `GET /me`. Pull request CI runs Go tests against PostgreSQL, `go vet`, `govulncheck`, `npm audit`, and the web build.
 
-Milestone 1 (a local fake publishing loop) is in progress. Done so far: content metadata in PostgreSQL; authenticated `POST /content` and `GET /content` scoped to the signed in creator; a web page to create and list content; one local media file per content item via authenticated `POST /content/{id}/media` (MP4 or WebM, up to 100 MiB, stored in a Docker volume); the fake platform account schema with ownership, uniqueness, validation, and migration lifecycle tests (M1.5); and authenticated creation of one deterministic fake platform account per creator (M1.6 PR2).
+Milestone 1 (a local fake publishing loop) is in progress. Done so far: content metadata in PostgreSQL; authenticated `POST /content` and `GET /content` scoped to the signed in creator; a web page to create and list content; one local media file per content item via authenticated `POST /content/{id}/media` (MP4 or WebM, up to 100 MiB, stored in a Docker volume); the fake platform account schema with ownership, uniqueness, validation, and migration lifecycle tests (M1.5); and authenticated creation and listing of deterministic fake platform accounts scoped to each creator (M1.6).
 
-Next: listing fake platform accounts (M1.6), followed by platform specific posts, synchronous publishing to a fake platform, and the web screens for upload, account selection, and publishing.
+Next: platform specific posts, synchronous publishing to a fake platform, and the web screens for upload, account selection, and publishing.
 
 Not yet built: real social platform integrations, metrics, and cloud deployment.
 
