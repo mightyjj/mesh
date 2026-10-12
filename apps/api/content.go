@@ -23,18 +23,22 @@ import (
 )
 
 type content struct {
-	ContentID int64     `json:"content_id"`
-	CreatorID int64     `json:"-"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ContentID        int64     `json:"content_id"`
+	CreatorID        int64     `json:"-"`
+	Title            string    `json:"title"`
+	OriginalFilename *string   `json:"original_filename"`
+	MIMEType         *string   `json:"mime_type"`
+	ByteSize         *int64    `json:"byte_size"`
+	StorageKey       *string   `json:"storage_key"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type createContentRequest struct {
 	Title string `json:"title"`
 }
 
-const contentColumns = "content_id, creator_id, title, created_at, updated_at"
+const contentColumns = "content_id, creator_id, title, original_filename, mime_type, byte_size, storage_key, created_at, updated_at"
 
 const (
 	maxMediaBytes            int64 = 100 << 20
@@ -280,7 +284,7 @@ func uploadContentMediaHandler(db *sql.DB) http.HandlerFunc {
 }
 
 func scanContent(scanner rowScanner, target *content) error {
-	return scanner.Scan(&target.ContentID, &target.CreatorID, &target.Title, &target.CreatedAt, &target.UpdatedAt)
+	return scanner.Scan(&target.ContentID, &target.CreatorID, &target.Title, &target.OriginalFilename, &target.MIMEType, &target.ByteSize, &target.StorageKey, &target.CreatedAt, &target.UpdatedAt)
 }
 
 func createContentHandler(db *sql.DB) http.HandlerFunc {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -132,11 +133,49 @@ func TestContentCreateAndListAgainstPostgres(t *testing.T) {
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&items); err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != len(created) || items[0] != created[0] || items[1] != created[1] {
+	if len(items) != len(created) || !reflect.DeepEqual(items, created) {
 		t.Fatalf("expected current user's content in stable order %+v, got %+v", created, items)
 	}
 	if strings.Contains(body, "creator_id") {
 		t.Fatal("response exposed creator ID")
+	}
+
+	var createdFields map[string]any
+	recorder = request(http.MethodPost, "/content", `{"title":"Fields check"}`, clerkUserID)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected create status %d, got %d: %s", http.StatusCreated, recorder.Code, recorder.Body.String())
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&createdFields); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"original_filename", "mime_type", "byte_size", "storage_key"} {
+		if value, ok := createdFields[key]; !ok || value != nil {
+			t.Fatalf("expected %s to be present and null, got %v (present: %t)", key, value, ok)
+		}
+	}
+	mediaID := int64(createdFields["content_id"].(float64))
+	if _, err := db.ExecContext(ctx, "UPDATE content SET original_filename = 'clip.mp4', mime_type = 'video/mp4', byte_size = 123, storage_key = $2 WHERE content_id = $1", mediaID, fmt.Sprintf("content-media-%d.mp4", suffix)); err != nil {
+		t.Fatal(err)
+	}
+	recorder = request(http.MethodGet, "/content", "", clerkUserID)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected list status %d, got %d: %s", http.StatusOK, recorder.Code, recorder.Body.String())
+	}
+	items = nil
+	if err := json.NewDecoder(recorder.Body).Decode(&items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != len(created)+1 {
+		t.Fatalf("expected %d items, got %+v", len(created)+1, items)
+	}
+	withMedia := items[len(items)-1]
+	if withMedia.ContentID != mediaID || withMedia.OriginalFilename == nil || *withMedia.OriginalFilename != "clip.mp4" ||
+		withMedia.MIMEType == nil || *withMedia.MIMEType != "video/mp4" || withMedia.ByteSize == nil || *withMedia.ByteSize != 123 ||
+		withMedia.StorageKey == nil || *withMedia.StorageKey != fmt.Sprintf("content-media-%d.mp4", suffix) {
+		t.Fatalf("expected media metadata on item %d, got %+v", mediaID, withMedia)
+	}
+	if items[0].OriginalFilename != nil || items[0].MIMEType != nil || items[0].ByteSize != nil || items[0].StorageKey != nil {
+		t.Fatalf("expected null media metadata on item without media, got %+v", items[0])
 	}
 
 	recorder = request(http.MethodGet, "/content", "", otherClerkUserID)
