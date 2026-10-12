@@ -54,6 +54,8 @@ func TestPlatformAccountPersistenceAgainstPostgres(t *testing.T) {
 			t.Fatalf("expected generated platform_account_id, got %d", accountIDs[i])
 		}
 	}
+	_, err = db.ExecContext(ctx, "INSERT INTO platform_accounts (user_id, platform, external_account_id, display_name) VALUES ($1, 'fake', $2, 'Missing Owner')", -1, fmt.Sprintf("account-%d-missing-owner", suffix))
+	assertPostgresCode(t, err, "23503")
 	var after time.Time
 	if err := db.QueryRowContext(ctx, "SELECT CURRENT_TIMESTAMP").Scan(&after); err != nil {
 		t.Fatal(err)
@@ -86,5 +88,19 @@ func TestPlatformAccountPersistenceAgainstPostgres(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.ExecContext(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+		t.Fatal(err)
+	}
+	var accountCount int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM platform_accounts WHERE user_id = $1", userID).Scan(&accountCount); err != nil {
+		t.Fatal(err)
+	}
+	if accountCount != 0 {
+		t.Fatalf("expected platform accounts to be deleted with owner, found %d", accountCount)
 	}
 }
